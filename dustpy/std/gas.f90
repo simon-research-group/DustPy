@@ -534,10 +534,55 @@ subroutine s_tot(s_ext, s_hyd, s, Nr)
 
 end subroutine s_tot
 
+subroutine sigma(r,S,Nr)
+   use self_gravity 
+
+   implicit none 
+
+   double precision, intent(in)  :: r(Nr)
+   double precision, intent(out) :: S(Nr)
+   integer,          intent(in)  :: Nr
+
+   double precision              :: T(Nr)
+
+   call init_cond(r,S,T,Nr)
+
+end subroutine sigma
+
+subroutine t_init(r,T,Nr)
+   use self_gravity 
+
+   implicit none 
+
+   double precision, intent(in)  :: r(Nr)
+   double precision, intent(out) :: T(Nr)
+   integer,          intent(in)  :: Nr
+
+   double precision              :: S(Nr)
+
+   call init_cond(r,S,T,Nr)
+
+end subroutine t_init
+
+subroutine t_update(r,S,T_old,T_new,Nr)
+   use self_gravity 
+
+   implicit none 
+
+   double precision, intent(in)  :: r(Nr)
+   double precision, intent(in)  :: S(Nr)
+   double precision, intent(in)  :: T_old(Nr)
+   double precision, intent(out) :: T_new(Nr)
+   integer,          intent(in)  :: Nr
+
+   call T_balance(r,S,T_old,T_new,Nr)
+
+end subroutine t_update
+
 
 subroutine t_pass(L, r, T, Nr)
    ! Function calculates the gas temperature in a passively irradiated disk.
-   !
+   
    ! Parameters
    ! ----------
    ! L : Stellar luminosity
@@ -681,13 +726,94 @@ subroutine v_visc(Sigma, nu, r, ri, vvisc, Nr)
 
 end subroutine v_visc
 
+subroutine alpha_gt(r, S, OmegaK, alpha, Nr)
+   ! Subroutine calculates the visoucity parameter for gravitoturbulence 
+   !
+   ! Parameters
+   ! ----------
+   ! r(Nr) : radial grid  
+   ! S(Nr) : gas surface density 
+   ! Nr    : Number of radial grid cells
+   !
+   ! Returns
+   ! -------
+   ! alpha : viscousity parameter
 
-subroutine viscosity(alpha, cs, Hp, nu, Nr)
+   use constants
+   use self_gravity
+
+   implicit none 
+
+   double precision, intent(in)  :: r(Nr)
+   double precision, intent(in)  :: S(Nr)
+   double precision, intent(in)  :: OmegaK(Nr)
+   double precision, intent(out) :: alpha(Nr)
+   integer,          intent(in)  :: Nr
+
+   double precision, dimension(Nr) :: T,num,den,out_f
+   double precision                :: Q_0 = 1.5
+   double precision                :: T_irr = 12
+
+   integer                         :: i
+
+   ! w(:) = sqrt(G*M_sun/(r(:)**3))
+   ! T(:) = (2.34 * m_p / k_b) *((pi * G * S(:) * Q_0) / w(:))**(2.0)
+   
+   do i=1,Nr
+      call T_Q(r(i),S(i),T(i))
+      call f(T(i),S(i),out_f(i))
+   end do
+
+   ! kappa(:) = (5.d-4)*T(:)**2
+   ! tau(:) = S(:)*kappa(:)
+
+   num(:) = 8 * sigma_sb * (pi * G * Q_0)**6 * (2.34 * m_p)**4 * S(:)**5 * (1-(T_irr/T(:))**4)
+   den(:) = 9 * out_f(:) * k_b**4 * OmegaK(:)**7
+
+   !do i=1,Nr
+      !alpha(i) = max(0.0d0,num(i)/den(i))
+   !end do
+   alpha(:) = 1.d-2
+
+end subroutine
+
+subroutine alpha(r, S, OmegaK, alpha_m, a, Nr)
+   ! Subroutine calculates the total visoucity parameter 
+   !
+   ! Parameters
+   ! ----------
+   ! r(Nr) : radial grid 
+   ! S(Nr) : gas surface density 
+   ! Nr    : Number of radial grid cells
+   ! alpha : Alpha visousity parameter
+   !
+   ! Returns
+   ! -------
+   ! a     : total viscousity parameter
+
+   implicit none 
+
+   double precision, intent(in)  :: r(Nr)
+   double precision, intent(in)  :: S(Nr)
+   double precision, intent(in)  :: OmegaK(Nr)
+   double precision, intent(in)  :: alpha_m(Nr)
+   double precision, intent(out) :: a(Nr)
+   integer,          intent(in)  :: Nr
+
+   double precision, dimension(Nr) :: a_gt(Nr)
+
+   call alpha_gt(r,S,OmegaK,a_gt,Nr)
+
+   a(:) = alpha_m(:) + a_gt(:)
+
+end subroutine
+
+subroutine viscosity(r, OmegaK, alpha_m, cs, Hp, Sigma, nu, Nr)
    ! Subroutine calculates the kinematic viscosity.
    !
    ! Parameters
    ! ----------
-   ! alpha(Nr) : Alpha viscosity parameter
+   ! alpha_m(Nr) : Alpha viscosity parameter
    ! cs(Nr) : sound speed
    ! Hp(Nr) : Gas scale height
    ! Nr : Number of radial grid cells
@@ -698,12 +824,18 @@ subroutine viscosity(alpha, cs, Hp, nu, Nr)
 
    implicit none
 
-   double precision, intent(in)  :: alpha(Nr)
+   double precision, intent(in)  :: alpha_m(Nr)
+   double precision, intent(in)  :: r(Nr)
+   double precision, intent(in)  :: OmegaK(Nr)
+   double precision, intent(in)  :: Sigma(Nr)
    double precision, intent(in)  :: cs(Nr)
    double precision, intent(in)  :: Hp(Nr)
    double precision, intent(out) :: nu(Nr)
    integer,          intent(in)  :: Nr
 
-   nu(:) = alpha(:) * cs(:) * Hp(:)
+   double precision              :: a(Nr)
+
+   call alpha(r,Sigma,OmegaK,alpha_m,a,Nr)
+   nu(:) = a(:) * cs(:) * Hp(:)
 
 end subroutine viscosity

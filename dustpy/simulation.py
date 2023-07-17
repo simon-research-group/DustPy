@@ -17,6 +17,8 @@ from dustpy.utils.boundary import Boundary
 import numpy as np
 from types import SimpleNamespace
 
+def hello():
+    print("Hello world")
 
 class Simulation(Frame):
     """The main simulation class for running dust coagulation simulations.
@@ -49,7 +51,7 @@ class Simulation(Frame):
                                                                   "vfrag": 100.
                                                                   }
                                                                ),
-                                       "gas": SimpleNamespace(**{"alpha": 1.e-3,
+                                       "gas": SimpleNamespace(**{"alpha_m": 1.e-3,
                                                                  "gamma": 1.4,
                                                                  "Mdisk": 0.05*c.M_sun,
                                                                  "mu": 2.3*c.m_p,
@@ -60,9 +62,9 @@ class Simulation(Frame):
                                        "grid": SimpleNamespace(**{"Nmbpd": 7,
                                                                   "mmin": 1.e-12,
                                                                   "mmax": 1.e5,
-                                                                  "Nr": 100,
-                                                                  "rmin": 1.*c.au,
-                                                                  "rmax": 1000.*c.au
+                                                                  "Nr": 500,
+                                                                  "rmin": 25.*c.au,
+                                                                  "rmax": 300.*c.au
                                                                   }
                                                                ),
                                        "star": SimpleNamespace(**{"M": 1.*c.M_sun,
@@ -144,6 +146,8 @@ class Simulation(Frame):
 
         # Gas quantities
         self.gas = Group(self, description="Gas quantities")
+        self.gas.alpha_m = None
+        self.gas.alpha_gt = None
         self.gas.alpha = None
         self.gas.boundary = Group(self, description="Boundary conditions")
         self.gas.boundary.inner = None
@@ -171,7 +175,7 @@ class Simulation(Frame):
         self.gas.v.rad = None
         self.gas.v.visc = None
         self.gas.v.updater = ["visc", "rad"]
-        self.gas.updater = ["gamma", "mu", "T", "alpha", "cs", "Hp", "nu",
+        self.gas.updater = ["gamma", "mu", "T", "alpha", "alpha_gt", "cs", "Hp", "nu",
                             "rho", "n", "mfp", "P", "eta", "S"]
 
         # Grid quantities
@@ -475,15 +479,15 @@ class Simulation(Frame):
             self.dust.D.updater = std.dust.D
         # Deltas
         if self.dust.delta.rad is None:
-            delta = self.ini.gas.alpha * np.ones(shape1)
+            delta = self.ini.gas.alpha_m * np.ones(shape1)
             self.dust.delta.rad = Field(
                 self, delta, description="Radial mixing parameter")
         if self.dust.delta.turb is None:
-            delta = self.ini.gas.alpha * np.ones(shape1)
+            delta = self.ini.gas.alpha_m * np.ones(shape1)
             self.dust.delta.turb = Field(
                 self, delta, description="Turbulent mixing parameter")
         if self.dust.delta.vert is None:
-            delta = self.ini.gas.alpha * np.ones(shape1)
+            delta = self.ini.gas.alpha_m * np.ones(shape1)
             self.dust.delta.vert = Field(
                 self, delta, description="Vertical mixing parameter")
         # Vertically integrated dust to gas ratio
@@ -646,11 +650,22 @@ class Simulation(Frame):
         '''Function to initialize gas quantities'''
         shape1 = (int(self.grid.Nr))
         shape1p1 = (int(self.grid.Nr)+1)
-        # Turbulent alpha parameter
+        # Turbulent alpha parameter from other sources
+        if self.gas.alpha_m is None:
+            alpha = self.ini.gas.alpha_m * np.ones(shape1)
+            self.gas.alpha_m = Field(
+                self,alpha, description="Turbulent alpha parameter from other sources")
+        # Turbulent alpha parameter from other gravitoturbulence
+        if self.gas.alpha_gt is None:
+            self.gas.alpha_gt = Field(
+                self,np.zeros(shape1), description="Turbulent alpha parameter from other sources")  
+            self.gas.alpha_gt.updater = std.gas.alpha_gt 
+        # Turbulent alpha parameter from combined sources
         if self.gas.alpha is None:
-            alpha = self.ini.gas.alpha * np.ones(shape1)
+            #alpha = self.ini.gas.alpha_m * np.ones(shape1)
             self.gas.alpha = Field(
-                self, alpha, description="Turbulent alpha parameter")
+                self,np.zeros(shape1), description="Total turbulent alpha parameter")
+            self.gas.alpha.updater = std.gas.new_alpha
         # Sound speed
         if self.gas.cs is None:
             self.gas.cs = Field(self, np.zeros(shape1),
@@ -724,17 +739,19 @@ class Simulation(Frame):
                 self, 1.e-100*np.ones(shape1), description="Floor value of surface density [g/cm²]")
         # Surface density
         if self.gas.Sigma is None:
-            SigmaGas = np.array(std.gas.lyndenbellpringle1974(
-                self.grid.r, self.ini.gas.SigmaRc, self.ini.gas.SigmaExp, self.ini.gas.Mdisk))
+            #SigmaGas = np.array(std.gas.lyndenbellpringle1974(
+            #    self.grid.r, self.ini.gas.SigmaRc, self.ini.gas.SigmaExp, self.ini.gas.Mdisk))
+            SigmaGas = std.gas.Sigma(self)
             SigmaGas = np.maximum(SigmaGas, self.gas.SigmaFloor)
             self.gas.Sigma = Field(self, SigmaGas,
                                    description="Surface density [g/cm²]")
         self.gas.Sigma.jacobinator = std.gas.jacobian
         # Temperature
         if self.gas.T is None:
-            self.gas.T = Field(self, np.zeros(shape1),
+            temp = std.gas.T_init(self)
+            self.gas.T = Field(self, temp,
                                description="Temperature [K]")
-            self.gas.T.updater = std.gas.T_passive
+            self.gas.T.updater = std.gas.T_balance
         # Velocities
         # Viscous accretion velocity
         if self.gas.v.visc is None:
@@ -777,7 +794,7 @@ class Simulation(Frame):
             self.gas.boundary.outer = Boundary(
                 self.grid.r[::-1], self.grid.ri[::-1], self.gas.Sigma[::-1])
             self.gas.boundary.outer.setcondition(
-                "val", 0.1*self.gas.SigmaFloor[-1])
+                "val", self.gas.Sigma[-1])
 
     def _initializegrid(self):
         '''Function to initialize grid quantities'''

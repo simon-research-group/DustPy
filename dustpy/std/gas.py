@@ -374,6 +374,44 @@ def n_midplane(sim):
         sim.gas.rho
     )
 
+def alpha_gt(sim):
+    """ Function calculates the total turbulence (gravitoturbulence plut outside factors)
+    
+    Parameters
+    ----------
+    sim : Frame
+        Parent simulation fram
+    
+    Returns
+    -------
+    alpha : Field
+        Total turbulence
+    """
+    return gas_f.alpha_gt(
+        sim.grid.r,
+        sim.gas.Sigma,
+        sim.grid.OmegaK,
+    )
+
+def new_alpha(sim):
+    """ Function calculates the total turbulence (gravitoturbulence plut outside factors)
+    
+    Parameters
+    ----------
+    sim : Frame
+        Parent simulation fram
+    
+    Returns
+    -------
+    alpha : Field
+        Total turbulence
+    """
+    return gas_f.alpha(
+        sim.grid.r,
+        sim.gas.Sigma,
+        sim.grid.OmegaK,
+        sim.gas.alpha_m
+    )
 
 def nu(sim):
     """Function calculates the kinematic viscocity of the gas.
@@ -388,9 +426,12 @@ def nu(sim):
     nu : Field
         Kinematic viscosity"""
     return gas_f.viscosity(
+        sim.grid.r,
+        sim.grid.OmegaK,
         sim.gas.alpha,
         sim.gas.cs,
-        sim.gas.Hp
+        sim.gas.Hp,
+        sim.gas.Sigma
     )
 
 
@@ -461,6 +502,54 @@ def S_tot(sim):
     return gas_f.s_tot(
         sim.gas.S.ext,
         sim.gas.S.hyd
+    )
+
+def Sigma(sim):
+    """Function calculates the initial surface density
+
+    Parameters
+    ----------
+    sim : Frame
+        Parent simulation frame
+
+    Returns
+    -------
+    Sigma : Field
+        Initial Surface Density"""
+    return gas_f.sigma(sim.grid.r)
+
+def T_init(sim):
+    """Function calculates the initial temperature profile, given the surface density, that keeps the disk in a energy balance.
+
+    Parameters
+    ----------
+    sim : Frame
+        Parent simulation frame
+
+    Returns
+    -------
+    T : Field
+        Gas temperature"""
+    
+    return gas_f.t_init(sim.grid.r)
+
+def T_balance(sim):
+    """Function calculates the temperature profile, given the surface density, that keeps the disk in a energy balance.
+
+    Parameters
+    ----------
+    sim : Frame
+        Parent simulation frame
+
+    Returns
+    -------
+    T : Field
+        Gas temperature"""
+    
+    return gas_f.t_update(
+        sim.grid.r,
+        sim.gas.Sigma,
+        sim.gas.T
     )
 
 
