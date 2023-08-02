@@ -534,48 +534,96 @@ subroutine s_tot(s_ext, s_hyd, s, Nr)
 
 end subroutine s_tot
 
-subroutine sigma(r,S,Nr)
+subroutine sigma(r,rc,p,S,Nr)
+   ! Subrountine calculates the intial gas surface density structure
+   !
+   ! Parameters
+   ! ----------
+   ! r(Nr)  :  array of radial distances from the star (AU)
+   ! rc     :  critical radius 
+   ! p      :  exponent
+   ! Nr     :  Number of radial grid cells
+   !
+   ! Returns
+   ! -------
+   ! S(Nr)  :  midplace gas surface density
+
    use self_gravity 
 
    implicit none 
 
    double precision, intent(in)  :: r(Nr)
+   double precision, intent(in)  :: rc
+   double precision, intent(in)  :: p
    double precision, intent(out) :: S(Nr)
    integer,          intent(in)  :: Nr
 
    double precision              :: T(Nr)
 
-   call init_cond(r,S,T,Nr)
+   call init_cond(r,rc,p,S,T,Nr)
 
 end subroutine sigma
 
-subroutine t_init(r,T,Nr)
+subroutine t_init(r,rc,p,T,Nr)
+   ! Subrountine calculates the intial gas temperature structure
+   !
+   ! Parameters
+   ! ----------
+   ! r(Nr)  :  array of radial distances from the star (AU)
+   ! rc     :  critical radius 
+   ! p      :  exponent
+   ! Nr     :  Number of radial grid cells
+   !
+   ! Returns
+   ! -------
+   ! T(Nr)  :  midplace gas temperature
    use self_gravity 
 
    implicit none 
 
    double precision, intent(in)  :: r(Nr)
+   double precision, intent(in)  :: rc
+   double precision, intent(in)  :: p
    double precision, intent(out) :: T(Nr)
    integer,          intent(in)  :: Nr
 
    double precision              :: S(Nr)
 
-   call init_cond(r,S,T,Nr)
+   call init_cond(r,rc,p,S,T,Nr)
 
 end subroutine t_init
 
-subroutine t_update(r,S,T_old,T_new,Nr)
+subroutine t_update(r,S,OmegaK,T_new,Nr)
+   ! This subroutine updates the thermally balanced temperature structure of the disk using the secant method and given a surface density
+   !
+   ! Parameters: 
+   ! ------------
+   ! r(Nr)      =  radial distance from the star (AU)
+   ! S(Nr)      =  midplace gas surface density
+   ! T_old(Nr)  =  previous miplace gas temperature
+   ! Nr         =  number of radial grid cells
+   !
+   ! Returns:
+   ! -----------
+   ! T_new(Nr)  = thermally balanced temperature structure
+
    use self_gravity 
+   use constants
 
    implicit none 
 
    double precision, intent(in)  :: r(Nr)
    double precision, intent(in)  :: S(Nr)
-   double precision, intent(in)  :: T_old(Nr)
+   double precision, intent(in)  :: OmegaK(Nr)
+   !double precision, intent(in)  :: T_old(Nr)
    double precision, intent(out) :: T_new(Nr)
    integer,          intent(in)  :: Nr
+   
+   double precision              :: Q_0 = 1.5
 
-   call T_balance(r,S,T_old,T_new,Nr)
+   !call T_balance(r,S,T_old,T_new,Nr)
+
+   T_new(:) = (2.3 * m_p /(1.4*k_b)) *((pi * G * S(:) * Q_0) / OmegaK(:))**(2.0)
 
 end subroutine t_update
 
@@ -731,9 +779,10 @@ subroutine alpha_gt(r, S, OmegaK, alpha, Nr)
    !
    ! Parameters
    ! ----------
-   ! r(Nr) : radial grid  
-   ! S(Nr) : gas surface density 
-   ! Nr    : Number of radial grid cells
+   ! r(Nr)      : radial grid  
+   ! S(Nr)      : gas surface density 
+   ! OmegaK(Nr) : keplarian angular velocity
+   ! Nr         : Number of radial grid cells
    !
    ! Returns
    ! -------
@@ -756,24 +805,26 @@ subroutine alpha_gt(r, S, OmegaK, alpha, Nr)
 
    integer                         :: i
 
-   ! w(:) = sqrt(G*M_sun/(r(:)**3))
-   ! T(:) = (2.34 * m_p / k_b) *((pi * G * S(:) * Q_0) / w(:))**(2.0)
+   
+   !T(:) = (2.34 * m_p / k_b) *((pi * G * S(:) * Q_0) / OmegaK(:))**(2.0) 
    
    do i=1,Nr
       call T_Q(r(i),S(i),T(i))
       call f(T(i),S(i),out_f(i))
    end do
 
-   ! kappa(:) = (5.d-4)*T(:)**2
-   ! tau(:) = S(:)*kappa(:)
+   !kappa(:) = (5.d-4)*T(:)**2
+   !tau(:) = S(:)*kappa(:)
+   !out_f(:) = tau(:) + 1./tau(:)
 
    num(:) = 8 * sigma_sb * (pi * G * Q_0)**6 * (2.34 * m_p)**4 * S(:)**5 * (1-(T_irr/T(:))**4)
    den(:) = 9 * out_f(:) * k_b**4 * OmegaK(:)**7
 
+   !alpha(:) = num(:)/den(:)
    !do i=1,Nr
-      !alpha(i) = max(0.0d0,num(i)/den(i))
+   !   alpha(i) = max(0.0d0,num(i)/den(i))
    !end do
-   alpha(:) = 1.d-2
+   alpha(:) = 1.d-3
 
 end subroutine
 
@@ -782,14 +833,15 @@ subroutine alpha(r, S, OmegaK, alpha_m, a, Nr)
    !
    ! Parameters
    ! ----------
-   ! r(Nr) : radial grid 
-   ! S(Nr) : gas surface density 
-   ! Nr    : Number of radial grid cells
-   ! alpha : Alpha visousity parameter
+   ! r(Nr)      : radial grid 
+   ! S(Nr)      : gas surface density 
+   ! OmegaK(Nr) : keplarian angular velocity
+   ! Nr         : number of radial grid cells
+   ! alpha      : non-gravitoturbulent alpha visousity parameter
    !
    ! Returns
    ! -------
-   ! a     : total viscousity parameter
+   ! a          : total viscousity parameter
 
    implicit none 
 

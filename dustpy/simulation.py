@@ -56,7 +56,8 @@ class Simulation(Frame):
                                                                  "Mdisk": 0.05*c.M_sun,
                                                                  "mu": 2.3*c.m_p,
                                                                  "SigmaExp": -1.,
-                                                                 "SigmaRc": 60.*c.au
+                                                                 "SigmaRc": 60.*c.au,
+                                                                 "Tirr": 12
                                                                  }
                                                               ),
                                        "grid": SimpleNamespace(**{"Nmbpd": 7,
@@ -171,6 +172,7 @@ class Simulation(Frame):
         self.gas.Sigma = None
         self.gas.SigmaFloor = None
         self.gas.T = None
+        self.gas.Tirr = None
         self.gas.v = Group(self, description="Velocities")
         self.gas.v.rad = None
         self.gas.v.visc = None
@@ -655,7 +657,7 @@ class Simulation(Frame):
             alpha = self.ini.gas.alpha_m * np.ones(shape1)
             self.gas.alpha_m = Field(
                 self,alpha, description="Turbulent alpha parameter from other sources")
-        # Turbulent alpha parameter from other gravitoturbulence
+        # Turbulent alpha parameter from gravitoturbulence
         if self.gas.alpha_gt is None:
             self.gas.alpha_gt = Field(
                 self,np.zeros(shape1), description="Turbulent alpha parameter from other sources")  
@@ -746,11 +748,19 @@ class Simulation(Frame):
             self.gas.Sigma = Field(self, SigmaGas,
                                    description="Surface density [g/cm²]")
         self.gas.Sigma.jacobinator = std.gas.jacobian
+        #Temperature from irradiation
+        if self.gas.Tirr is None:
+            t_irr = self.ini.gas.Tirr*np.ones(shape1)
+            self.gas.Tirr = Field(
+                self, t_irr, description="Floor value of surface density [g/cm²]")
         # Temperature
         if self.gas.T is None:
-            temp = std.gas.T_init(self)
-            self.gas.T = Field(self, temp,
-                               description="Temperature [K]")
+            #temp = std.gas.T_init(self)
+            #temp = np.maximum(temp, self.gas.Tirr)
+            #self.gas.T = Field(self, temp,
+            #                  description="Temperature [K]")
+            self.gas.T = Field(self, np.zeros(shape1),description="Temperature [K]")
+            #self.gas.T.updater = std.gas.T_passive
             self.gas.T.updater = std.gas.T_balance
         # Velocities
         # Viscous accretion velocity
@@ -794,7 +804,7 @@ class Simulation(Frame):
             self.gas.boundary.outer = Boundary(
                 self.grid.r[::-1], self.grid.ri[::-1], self.gas.Sigma[::-1])
             self.gas.boundary.outer.setcondition(
-                "val", self.gas.Sigma[-1])
+                "val", 0.1*self.gas.SigmaFloor[-1])
 
     def _initializegrid(self):
         '''Function to initialize grid quantities'''

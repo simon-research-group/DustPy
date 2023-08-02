@@ -516,7 +516,7 @@ def Sigma(sim):
     -------
     Sigma : Field
         Initial Surface Density"""
-    return gas_f.sigma(sim.grid.r)
+    return gas_f.sigma(sim.grid.r,sim.ini.gas.SigmaRc,sim.ini.gas.SigmaExp)
 
 def T_init(sim):
     """Function calculates the initial temperature profile, given the surface density, that keeps the disk in a energy balance.
@@ -531,7 +531,7 @@ def T_init(sim):
     T : Field
         Gas temperature"""
     
-    return gas_f.t_init(sim.grid.r)
+    return gas_f.t_init(sim.grid.r,sim.ini.gas.SigmaRc,sim.ini.gas.SigmaExp)
 
 def T_balance(sim):
     """Function calculates the temperature profile, given the surface density, that keeps the disk in a energy balance.
@@ -549,7 +549,7 @@ def T_balance(sim):
     return gas_f.t_update(
         sim.grid.r,
         sim.gas.Sigma,
-        sim.gas.T
+        sim.grid.OmegaK
     )
 
 

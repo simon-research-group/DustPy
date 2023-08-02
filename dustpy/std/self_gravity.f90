@@ -9,8 +9,7 @@ module self_gravity
         !
         ! Parameters:
         ! ------------
-        ! r(Nr)  = the array of r values (AU)
-        ! Nr     = size of the array of r values
+        ! r = radial distance from the star (AU)
         ! 
         ! Returns:
         ! ------------
@@ -30,7 +29,16 @@ module self_gravity
     end subroutine Omega
     
     subroutine opacity(T,kappa)
-
+        ! This subroutine calculates the dust opacity at a given temperature (assuming icy grains)
+        !
+        ! Parameters:
+        ! ------------
+        ! T      =  midplane gas temperature 
+        ! 
+        ! Returns:
+        ! ------------
+        ! kappa  =  opacity
+    
         implicit none
     
         integer,  parameter   :: dp = selected_real_kind(15)
@@ -38,7 +46,7 @@ module self_gravity
         real(dp), intent(out) :: kappa
     
         real(dp)              :: b = 2
-        real(dp)              :: k = 2d-4
+        real(dp)              :: k = 5d-4
     
         kappa = k * T**b
     
@@ -49,12 +57,12 @@ module self_gravity
         !
         ! Parameters:
         ! ------------
-        ! tau(Nr)    = the array of opacity values 
-        ! Nr         = size of the array of tau values
+        ! T      =  midplane gas temperature 
+        ! S      =  midplane gas surface density
         ! 
         ! Returns:
         ! ------------
-        ! out_f(Nr)  = explicit optical depth 
+        ! out_f  =  explicit optical depth 
     
         implicit none
     
@@ -74,17 +82,16 @@ module self_gravity
     end subroutine f
     
     subroutine T_Q(r,S,T)
-        ! This subroutine calculates the temperature where the disk is on the margin of grav. stability
+        ! This subroutine calculates the temperature where the disk is on the marginally stable
         !
         ! Parameters:
         ! ------------
-        ! r(Nr)  = the array of r values (AU)
-        ! Nr     = size of the array of r values
-        ! S(Nr)  = the array of surface density values
+        ! r  = radial distance from the star (AU)
+        ! S  = midplane gas surface density
         ! 
         ! Returns:
         ! ------------
-        ! T(Nr)  = temperature at margin of grav. stability 
+        ! T  = temperature at margin of grav. stability 
         
         use constants
         
@@ -95,30 +102,25 @@ module self_gravity
         double precision, intent(out) :: T
     
         double precision              :: Q_0 = 1.5
-        double precision              :: w 
+        double precision              :: w
      
         call Omega(r,w)
         T = (2.34 * m_p / k_b) *((pi * G * S * Q_0) / w)**(2.0)
-    
-        !write(*,"(ES20.5)") T
         
-    
     end subroutine T_Q
     
     subroutine FJ_Balance(r,T,S,FJ)
-        ! This subroutine calculates the gravitational viscous angular momentum flux 
+        ! This subroutine calculates the viscous angular momentum flux used to keep the disk in thermal balance
         !
         ! Parameters:
         ! ------------
-        ! r(Nr)   = the array of r values (AU)
-        ! S(Nr)   = the array of surface density values
-        ! T(Nr)   = the array of temperature values
-        ! tau(Nr) = the array of opacity values
-        ! Nr      = size of the array of r values
+        ! r     =  radial distance from the star (AU)
+        ! S     =  midplane gas surface density
+        ! T     =  midplane gas temperatur
         ! 
         ! Returns:
         ! ------------
-        ! M       = non-graviational angular momentum flux
+        ! FJ    = viscous angular momentum flux
         
         use constants 
         implicit none 
@@ -149,15 +151,12 @@ module self_gravity
         !
         ! Parameters:
         ! ------------
-        ! r(Nr)   = the array of r values (AU)
-        ! S(Nr)   = the array of surface density values
-        ! T(Nr)   = the array of temperature values
-        ! tau(Nr) = the array of opacity values
-        ! Nr      = size of the array of r values
+        ! r     =  radial distance from the star (AU)
+        ! S     =  midplane gas surface density
         ! 
         ! Returns:
         ! ------------
-        ! M       = non-graviational angular momentum flux
+        ! GT    = graviational viscous angular momentum flux
         
         use constants 
         implicit none 
@@ -183,20 +182,18 @@ module self_gravity
     
     end subroutine F_gt
     
-    
     subroutine F_m(r,T,S,M)
         ! This subroutine calculates the non-gravitational viscous angular momentum flux 
         !
         ! Parameters:
         ! ------------
-        ! r(Nr)  = the array of r values (AU)
-        ! S(Nr)  = the array of surface density values
-        ! T(Nr)  = the array of temperature values
-        ! Nr     = size of the array of r values
+        ! r     =  radial distance from the star (AU)
+        ! S     =  midplane gas surface density
+        ! T     =  midplance gas temperature
         ! 
         ! Returns:
         ! ------------
-        ! M      = non-graviational angular momentum flux
+        ! M     = non-graviational angular momentum flux
         
         use constants 
         implicit none 
@@ -208,24 +205,51 @@ module self_gravity
     
         double precision              :: alpha_m = 0.01
         
-        M = 3 * pi * alpha_m * (k_B * T / (2.34 * m_p)) * S * r**2.0
+        M = 3 * pi * alpha_m * (1.4 * k_B * T / (2.3 * m_p)) * S * r**2.0
     
     end subroutine F_m
+
+    subroutine F_J(r,S,T,FJ)
+        ! This subroutine calculates the total angular momentum flux from all sources
+        ! Parameters:
+        ! ------------
+        ! r     =  radial distance from the star (AU)
+        ! S     =  midplane gas surface density
+        ! T     =  midplance gas temperature
+        ! 
+        ! Returns:
+        ! ------------
+        ! FJ    = total angular momentum flux
+
+        implicit none 
     
+        double precision, intent(in)  :: r
+        double precision, intent(in)  :: S
+        double precision, intent(in)  :: T
+        double precision, intent(out) :: FJ
+    
+    
+        double precision              :: M, GT
+
+        call F_gt(r,S,GT)
+        call F_m(r,T,S,M) 
+
+        FJ = max(0.0d0,GT) + M
+
+    end subroutine F_J
+
     subroutine mass_flux(r,S,T,mass)
         ! This subroutine calculates the accretion rate given a surface density and temperature 
         !
         ! Parameters:
         ! ------------
-        ! r(Nr)   = the array of r values (AU)
-        ! S(Nr)   = the array of surface density values
-        ! T(Nr)   = the array of temperature values
-        ! tau(Nr) = the array of opacity values
-        ! Nr      = size of the array of r values
+        ! r     =  radial distance from the star (AU)
+        ! S     =  midplane gas surface density
+        ! T     =  midplance gas temperature
         ! 
         ! Returns:
         ! ------------
-        ! mass    = mass accretion rate   
+        ! mass  =  mass accretion rate   
         
         implicit none 
     
@@ -234,35 +258,29 @@ module self_gravity
         double precision, intent(in)  :: T
         double precision, intent(out) :: mass
     
+        double precision              :: FJ, w
     
-        double precision              :: M
-        double precision              :: GT
-        double precision              :: w 
-    
-        call F_gt(r,S,GT)
-        call F_m(r,T,S,M)
+        call F_J(r,S,T,FJ)
         call Omega(r,w)
     
         !write(*,"(2ES20.5)") GT,M
     
-        mass = (GT + M)/(w * r**2.0)
+        mass = FJ/(w * r**2.0)
     
     end subroutine mass_flux
     
     subroutine E(r,S,T,En)
-        ! This subroutine calculates the correct temperature that keeps the disk in energy balance
+        ! This subroutine gives the termal balance relation 
         !
         ! Parameters:
         ! ------------
-        ! r(Nr)   = the array of r values (AU)
-        ! S(Nr)   = the array of surface density values
-        ! T(Nr)   = the array of temperature values
-        ! tau(Nr) = the array of opacity values
-        ! Nr      = size of the array of r values
+        ! r     =  radial distance from the star (AU)
+        ! S     =  midplane gas surface density
+        ! T     =  midplance gas temperature
         ! 
         ! Returns:
         ! ------------
-        ! mass    = mass accretion rate   
+        ! En   = mass accretion rate   
         
         implicit none 
     
@@ -271,16 +289,12 @@ module self_gravity
         double precision, intent(in)  :: T
         double precision, intent(out) :: En
     
+        double precision              :: FJ,FJ_B
     
-        double precision              :: M
-        double precision              :: GT
-        double precision              :: FJ
+        call F_J(r,S,T,FJ)
+        call FJ_Balance(r,T,S,FJ_B)
     
-        call F_gt(r,S,GT)
-        call F_m(r,T,S,M)
-        call FJ_Balance(r,T,S,FJ)
-    
-        En = (GT + M) - FJ
+        En = FJ - FJ_B
     
     end subroutine E
     
@@ -289,15 +303,13 @@ module self_gravity
         !
         ! Parameters:
         ! ------------
-        ! r(Nr)   = the array of r values (AU)
-        ! S(Nr)   = the array of surface density values
-        ! T(Nr)   = the array of temperature values
-        ! tau(Nr) = the array of opacity values
-        ! Nr      = size of the array of r values
+        ! r     =  radial distance from the star (AU)
+        ! S     =  midplane gas surface density
+        ! T     =  midplance gas temperature
         ! 
         ! Returns:
         ! ------------
-        ! mass    = mass accretion rate   
+        ! diff  = difference in mass accretion rates
         
         use constants, only: M_sun,year
     
@@ -317,12 +329,11 @@ module self_gravity
     end subroutine A
     
     subroutine outer_initial(r,tau,T,S)
-        ! This subroutine calculates good initial guesses for the temp and surface density at 300 AU
+        ! This subroutine calculates good initial guesses for the temp and surface density at a given radius 
         !
         ! Parameters: 
         ! ------------
-        ! r(Nr)   = array of r values (AU)
-        ! Nr      = size of the r array
+        ! r     =  radial distance from the star (AU)
         !
         ! Returns:
         ! -----------
@@ -372,6 +383,20 @@ module self_gravity
     end subroutine outer_initial
     
     subroutine T_SM(r,S,t0,t1,t2)
+        ! This subroutine calculates a temperature that keeps the disk in energy balance using the secant method
+        !
+        ! Parameters: 
+        ! ------------
+        ! r     =  radial distance from the star (AU)
+        ! S     =  midplace gas surface density 
+        ! t0    =  first initial temperature guess
+        ! t1    =  second initial temperature guess
+        !
+        ! Returns:
+        ! -----------
+        ! t2     = final temperature that keeps the disk in energy balance
+
+        use constants
     
         implicit none 
     
@@ -392,20 +417,32 @@ module self_gravity
             t2 = t1 - (E1)*(t1 - t0)/(E1 - E0)
             t0 = t1
             t1 = t2
-        
         end do 
+    
     
     end subroutine T_SM
     
     subroutine S_SM(r,T,s0,s1,s2)
+        ! This subroutine calculates a surface density that keeps the disk in energy balance using the secant method
+        !
+        ! Parameters: 
+        ! ------------
+        ! r     =  radial distance from the star (AU)
+        ! T     =  midplace gas temperature 
+        ! s0    =  first initial surface density guess
+        ! s1    =  second initial surface density guess
+        !
+        ! Returns:
+        ! -----------
+        ! s2     = final surface density that keeps the disk in energy balance        
     
         implicit none 
     
-        double precision, intent(in)  :: r
-        double precision, intent(in)  :: T
+        double precision, intent(in)     :: r
+        double precision, intent(in)     :: T
         double precision, intent(inout)  :: s0
         double precision, intent(inout)  :: s1
-        double precision, intent(out) :: s2
+        double precision, intent(out)    :: s2
     
         double precision  :: tol = 1d-12
         double precision  :: A0,A1
@@ -423,39 +460,76 @@ module self_gravity
     
     end subroutine S_SM
     
-    subroutine init_cond(r,S,T,Nr)
+    subroutine init_cond(r,rc,p,S,T,Nr)
+        ! This subroutine calculates the initial conditions of the disk by providing the temperature and surface density structure
+        ! using the secant method
+        !
+        ! Parameters: 
+        ! ------------
+        ! r(Nr)   =  array of radial distances from the star (AU)
+        ! rc      =  critical radius 
+        ! p       =  exponent 
+        ! Nr      =  number of radial grid cells
+        !
+        ! Returns:
+        ! -----------
+        ! S(Nr)   = array of midplace gas surface densitys
+        ! T(Nr)   = array of midplace gas temperatures
+
         implicit none 
     
         double precision, intent(in)     :: r(Nr)
+        double precision, intent(in)     :: rc
+        double precision, intent(in)     :: p
         double precision, intent(out)    :: S(Nr)
         double precision, intent(out)    :: T(Nr)
         integer,          intent(in)     :: Nr
     
-        double precision                 :: tau,T_0,T_1,T_2,S_0,S_1,S_2
+        double precision                 :: tau,T_0,T_1,T_2,S_0,S_1,S_2,S_exp
         integer                          :: i
     
         call outer_initial(r(Nr),tau,T_0,S_0)
         T_1 = T_0 + 0.01
         S_1 = S_0 + 0.05
+        
+        !write(*,"(2ES20.5)") T_0,S_0
     
         do i=Nr,1,-1
+            !write(*,"(2ES20.5)") T_0,T_1
             call S_SM(r(i),T_0,S_0,S_1,S_2)
-            call T_SM(r(i),S_2,T_0,T_1,T_2)
+
+            S_exp = S_2*exp(-(r(i)/rc)**(2+p))
+
+            call T_SM(r(i),S_exp,T_0,T_1,T_2)
+
+            !write(*,"(2ES20.5)") S_exp,T_2
     
             T(i) = T_2
-            S(i) = S_2
+            S(i) = S_exp
     
             T_0 = T_2
             S_0 = S_2
             T_1 = T_0 + 0.01
-            S_1 = S_0 + 0.05
+            S_1 = S_0 + 0.01
     
        end do
     
     end subroutine init_cond
     
     subroutine T_balance(r,S,T_old,T_new,Nr)
-    
+        ! This subroutine updates the thermally balanced temperature structure of the disk using the secant method and given a surface density
+        !
+        ! Parameters: 
+        ! ------------
+        ! r(Nr)      =  radial distance from the star (AU)
+        ! S(Nr)      =  midplace gas surface density
+        ! T_old(Nr)  =  previous miplace gas temperature
+        ! Nr         =  number of radial grid cells
+        !
+        ! Returns:
+        ! -----------
+        ! T_new(Nr)  = thermally balanced temperature structure
+        
         implicit none 
     
         double precision, intent(in)     :: r(Nr)
@@ -467,12 +541,14 @@ module self_gravity
         double precision                 :: T_0,T_1,T_2
         integer                          :: i
         
+        T_new(Nr) = 12.0
         T_0 = T_old(Nr)
+        !write(*,"(ES20.5)") T_0
         T_1 = T_0 + 0.01
     
-        do i=Nr,1,-1
+        do i=Nr-1,1,-1
+            !write(*,"(4ES20.5)") r(i),T_0,T_1,S(i)
             call T_SM(r(i),S(i),T_0,T_1,T_2)
-            T_new(i) = T_2
     
             T_0 = T_2
             T_1 = T_0 + 0.01
